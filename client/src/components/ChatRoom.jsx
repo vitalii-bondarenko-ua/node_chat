@@ -1,6 +1,7 @@
 import { useEffect, useRef, useState } from 'react';
 import { chatApi } from '../api/chat';
 import { useRoomMessages } from '../hooks/useRoomMessages';
+import { MessageItem } from './MessageItem';
 
 const STATUS_LABELS = {
   connecting: 'Connecting and loading history…',
@@ -9,24 +10,27 @@ const STATUS_LABELS = {
   error: 'Connection error',
 };
 
-const dateFormatter = new Intl.DateTimeFormat('en-GB', {
-  dateStyle: 'short',
-  timeStyle: 'short',
-});
-
 export const ChatRoom = ({ room, userName }) => {
-  const { messages, status, error, addMessage, reconnect } = useRoomMessages(
-    room.id,
-  );
+  const {
+    messages,
+    status,
+    error,
+    addMessage,
+    updateMessage,
+    removeMessage,
+    reconnect,
+  } = useRoomMessages(room.id);
 
   const [text, setText] = useState('');
   const [sending, setSending] = useState(false);
   const [sendError, setSendError] = useState('');
   const endRef = useRef(null);
 
+  const lastMessageId = messages[messages.length - 1]?.id;
+
   useEffect(() => {
     endRef.current?.scrollIntoView({ block: 'end' });
-  }, [messages]);
+  }, [lastMessageId]);
 
   const handleSubmit = async (event) => {
     event.preventDefault();
@@ -52,6 +56,18 @@ export const ChatRoom = ({ room, userName }) => {
     }
   };
 
+  const handleUpdateMessage = async (messageId, newText) => {
+    const message = await chatApi.updateMessage(room.id, messageId, newText);
+
+    updateMessage(message);
+  };
+
+  const handleDeleteMessage = async (messageId) => {
+    await chatApi.deleteMessage(room.id, messageId);
+
+    removeMessage(messageId);
+  };
+
   return (
     <section className="chat">
       <header className="chat-header">
@@ -62,7 +78,9 @@ export const ChatRoom = ({ room, userName }) => {
         </span>
 
         {(status === 'offline' || status === 'error') && (
-          <button onClick={reconnect}>Reconnect</button>
+          <button type="button" onClick={reconnect}>
+            Reconnect
+          </button>
         )}
       </header>
 
@@ -78,22 +96,14 @@ export const ChatRoom = ({ room, userName }) => {
         )}
 
         {messages.map((message) => (
-          <article
+          <MessageItem
             key={message.id}
-            className={`message ${
-              message.author === userName ? 'message-own' : ''
-            }`}
-          >
-            <div className="message-meta">
-              <strong>{message.author}</strong>
-
-              <time dateTime={message.createdAt}>
-                {dateFormatter.format(new Date(message.createdAt))}
-              </time>
-            </div>
-
-            <p>{message.text}</p>
-          </article>
+            message={message}
+            isOwn={message.author === userName}
+            disabled={status !== 'connected'}
+            onUpdate={handleUpdateMessage}
+            onDelete={handleDeleteMessage}
+          />
         ))}
 
         <div ref={endRef} />
@@ -115,7 +125,10 @@ export const ChatRoom = ({ room, userName }) => {
           disabled={sending || status !== 'connected'}
         />
 
-        <button disabled={sending || status !== 'connected' || !text.trim()}>
+        <button
+          type="submit"
+          disabled={sending || status !== 'connected' || !text.trim()}
+        >
           {sending ? 'Sending…' : 'Send'}
         </button>
       </form>

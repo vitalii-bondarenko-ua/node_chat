@@ -5,3 +5,5 @@ export const messagesRouter = Router({ mergeParams: true });
 
 messagesRouter.get('/', messagesController.getMessages);
 messagesRouter.post('/', messagesController.createMessage);
+messagesRouter.patch('/:messageId', messagesController.updateMessage);
+messagesRouter.delete('/:messageId', messagesController.deleteMessage);

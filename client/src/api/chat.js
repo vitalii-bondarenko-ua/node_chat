@@ -48,4 +48,15 @@ export const chatApi = {
       method: 'POST',
       body: JSON.stringify({ author, text }),
     }),
+
+  updateMessage: (roomId, messageId, text) =>
+    request(`/room/${roomId}/messages/${messageId}`, {
+      method: 'PATCH',
+      body: JSON.stringify({ text }),
+    }),
+
+  deleteMessage: (roomId, messageId) =>
+    request(`/room/${roomId}/messages/${messageId}`, {
+      method: 'DELETE',
+    }),
 };

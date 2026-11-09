@@ -278,3 +278,45 @@ h2 {
     flex-wrap: wrap;
   }
 }
+
+.message-actions {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 8px;
+  margin-top: 10px;
+}
+
+.message-actions button {
+  padding: 5px 10px;
+  font-size: 12px;
+}
+
+.message-edit-form {
+  display: grid;
+  gap: 8px;
+  margin-top: 10px;
+}
+
+.message-edit-form textarea {
+  width: 100%;
+  min-width: 180px;
+  max-width: 100%;
+  padding: 10px;
+  border: 1px solid #cbd5e1;
+  border-radius: 8px;
+  font: inherit;
+  resize: vertical;
+}
+
+.message-edit-form textarea:focus-visible {
+  outline: 3px solid #93c5fd;
+  outline-offset: 2px;
+}
+
+.danger-button {
+  color: #b91c1c;
+}
+
+.danger-button:hover:not(:disabled) {
+  background: #fee2e2;
+}

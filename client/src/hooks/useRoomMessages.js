@@ -1,15 +1,30 @@
 import { useCallback, useEffect, useState } from 'react';
 import { chatApi, WS_URL } from '../api/chat';
 
-const mergeMessages = (current, incoming) => {
-  const messages = new Map(
-    [...current, ...incoming].map((message) => [message.id, message]),
-  );
+const MESSAGE_EVENTS = new Set([
+  'message:created',
+  'message:updated',
+  'message:deleted',
+]);
 
-  return [...messages.values()].sort(
+const sortMessages = (messages) =>
+  [...messages].sort(
     (a, b) =>
       new Date(a.createdAt) - new Date(b.createdAt) || a.id.localeCompare(b.id),
   );
+
+const applyMessageEvent = (messages, { event, payload }) => {
+  if (event === 'message:deleted') {
+    return messages.filter((message) => message.id !== payload.id);
+  }
+
+  const messagesById = new Map(
+    messages.map((message) => [message.id, message]),
+  );
+
+  messagesById.set(payload.id, payload);
+
+  return sortMessages([...messagesById.values()]);
 };
 
 export const useRoomMessages = (roomId) => {
@@ -19,20 +34,48 @@ export const useRoomMessages = (roomId) => {
   const [attempt, setAttempt] = useState(0);
 
   const addMessage = useCallback((message) => {
-    setMessages((current) => mergeMessages(current, [message]));
+    setMessages((current) =>
+      applyMessageEvent(current, {
+        event: 'message:created',
+        payload: message,
+      }),
+    );
+  }, []);
+
+  const updateMessage = useCallback((message) => {
+    setMessages((current) =>
+      applyMessageEvent(current, {
+        event: 'message:updated',
+        payload: message,
+      }),
+    );
+  }, []);
+
+  const removeMessage = useCallback((messageId) => {
+    setMessages((current) =>
+      current.filter((message) => message.id !== messageId),
+    );
   }, []);
 
   useEffect(() => {
     const controller = new AbortController();
     const socket = new WebSocket(WS_URL);
+
     let disposed = false;
-    let loadingHistory = false;
+    let historyStarted = false;
+    let historyLoaded = false;
+    let pendingEvents = [];
 
     setStatus('connecting');
     setError('');
 
     socket.onopen = () => {
-      socket.send(JSON.stringify({ event: 'join', roomId }));
+      socket.send(
+        JSON.stringify({
+          event: 'join',
+          roomId,
+        }),
+      );
     };
 
     socket.onmessage = async ({ data }) => {
@@ -46,26 +89,42 @@ export const useRoomMessages = (roomId) => {
           return;
         }
 
-        if (event === 'message:created' && payload.roomId === roomId) {
-          addMessage(payload);
-        }
+        if (MESSAGE_EVENTS.has(event) && payload.roomId === roomId) {
+          const messageEvent = { event, payload };
 
-        if (
-          event === 'joined' &&
-          payload.roomId === roomId &&
-          !loadingHistory
-        ) {
-          loadingHistory = true;
-
-          const history = await chatApi.getMessages(roomId, controller.signal);
-
-          if (!disposed) {
-            setMessages((current) => mergeMessages(current, history));
-            setStatus(
-              socket.readyState === WebSocket.OPEN ? 'connected' : 'offline',
-            );
+          if (!historyLoaded) {
+            pendingEvents.push(messageEvent);
+          } else {
+            setMessages((current) => applyMessageEvent(current, messageEvent));
           }
+
+          return;
         }
+
+        if (event !== 'joined' || payload.roomId !== roomId || historyStarted) {
+          return;
+        }
+
+        historyStarted = true;
+
+        const history = await chatApi.getMessages(roomId, controller.signal);
+
+        if (disposed) {
+          return;
+        }
+
+        const syncedMessages = pendingEvents.reduce(
+          applyMessageEvent,
+          sortMessages(history),
+        );
+
+        historyLoaded = true;
+        pendingEvents = [];
+
+        setMessages(syncedMessages);
+        setStatus(
+          socket.readyState === WebSocket.OPEN ? 'connected' : 'offline',
+        );
       } catch (err) {
         if (!disposed && err.name !== 'AbortError') {
           setError(err.message);
@@ -97,9 +156,19 @@ export const useRoomMessages = (roomId) => {
 
       socket.close();
     };
-  }, [roomId, attempt, addMessage]);
+  }, [roomId, attempt]);
 
-  const reconnect = () => setAttempt((value) => value + 1);
+  const reconnect = () => {
+    setAttempt((current) => current + 1);
+  };
 
-  return { messages, status, error, addMessage, reconnect };
+  return {
+    messages,
+    status,
+    error,
+    addMessage,
+    updateMessage,
+    removeMessage,
+    reconnect,
+  };
 };
