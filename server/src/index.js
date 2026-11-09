@@ -5,8 +5,7 @@ import cors from 'cors';
 import 'dotenv/config';
 
 import { WebSocketServer } from 'ws';
-// import { v4 as uuid } from 'uuid';
-// import { usersRouter } from './routers/usersRouter.js';
+import { v4 as uuid } from 'uuid';
 import { roomsRouter } from './routers/roomsRouter.js';
 
 const PORT = process.env.PORT || 3005;
@@ -21,7 +20,7 @@ app.use('/room', roomsRouter);
 // app.use('/');
 
 const server = app.listen(PORT, () => {
-  console.log(`Server running at http://localhost:${PORT}/`);
+  console.info(`Server running at http://localhost:${PORT}/`);
 });
 
 const wss = new WebSocketServer({ server });
@@ -32,6 +31,7 @@ const rooms = [
     messages: [],
   },
 ];
+
 wss.on('connection', (ws) => {
   ws.on('message', (text) => {
     const data = JSON.parse(text);
@@ -42,14 +42,19 @@ wss.on('connection', (ws) => {
         break;
 
       case 'createRoom':
-        const roomId = uuid(); //створити унікальний ID
-        rooms[roomId] = { name: data.name, messages: [] }; // створюєш кімнату в rooms
+        const roomId = uuid();
+
+        rooms[roomId] = {
+          name: data.name,
+          messages: [],
+        };
         ws.roomId = roomId;
-        ws.send(JSON.stringify({ type: 'rooCreated', roomId })); // треба відправити roomId назад клієнту
+        ws.send(JSON.stringify({ type: 'rooCreated', roomId }));
         break;
 
       case 'sendMessage': // відправляєш тільки в цю кімнату
         const roomFind = rooms.find((item) => item.id === data.roomId);
+
         if (!roomFind) {
           ws.send(
             JSON.stringify({
@@ -59,6 +64,7 @@ wss.on('connection', (ws) => {
           );
           break;
         }
+
         const newMessage = {
           // додаєш повідомлення в масив кімнати
           id: uuid(),
@@ -66,7 +72,9 @@ wss.on('connection', (ws) => {
           text: data.text,
           time: new Date().toISOString(),
         };
+
         roomFind.messages.push(newMessage);
+
         for (const client of wss.clients) {
           if (client.roomId === data.roomId) {
             client.send(
@@ -78,6 +86,7 @@ wss.on('connection', (ws) => {
 
       case 'joinRoom':
         ws.roomId = data.roomId;
+
         ws.send(
           JSON.stringify({
             type: 'oldMessages',
@@ -86,14 +95,18 @@ wss.on('connection', (ws) => {
         );
         break;
 
-      case 'renameRoom':
-        const roomRename = rooms[data.roomId]; //знаходиш кімнату по roomId взяти roomId з data
-        if (!roomRename) break; //знайти кімнату в rooms
-        room.name = data.name;
+      case 'renameRoom': {
+        const roomRename = rooms.find((room) => room.id === data.roomId);
+
+        if (!roomRename) {
+          break;
+        }
+
+        roomRename.name = data.name;
         break;
+      }
 
       case 'deleteRoom':
-        const room = rooms[data.roomId]; //знаходиш кімнату по roomId
         delete rooms[data.roomId];
         break;
     }

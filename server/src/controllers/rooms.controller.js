@@ -17,7 +17,6 @@ const getById = (req, res) => {
 
 const createRoom = async (req, res) => {
   const { name } = req.body;
-  console.log('create room', req.body);
 
   if (!name) {
     return res.status(400).send({ message: 'Name is required' });
@@ -30,7 +29,6 @@ const createRoom = async (req, res) => {
   if (!roomCreate) {
     return res.status(404).send({ message: 'Create room' });
   }
-  console.log('roomCreate', roomCreate);
 
   return res.status(201).json(roomCreate);
 };
@@ -53,8 +51,8 @@ const upDateRoom = async (req, res) => {
 
 const deletedRoomById = async (req, res) => {
   const { id } = req.params;
-  console.log('id', id);
-  const deletedRoom = await roomsService.deleteById(id); //Знайти кімнату за ID
+
+  const deletedRoom = await roomsService.deleteById(id); // Знайти кімнату за ID
 
   if (!deletedRoom) {
     return res.status(404).json({ message: 'Room not found' });

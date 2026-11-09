@@ -1,4 +1,3 @@
-
 import js from '@eslint/js';
 import globals from 'globals';
 import reactHooks from 'eslint-plugin-react-hooks';
@@ -7,6 +6,7 @@ import jest from 'eslint-plugin-jest';
 import { FlatCompat } from '@eslint/eslintrc';
 import { defineConfig, globalIgnores } from 'eslint/config';
 import { fixupConfigRules } from '@eslint/compat';
+import react from 'eslint-plugin-react';
 
 const compat = new FlatCompat({
   baseDirectory: import.meta.dirname,
@@ -27,6 +27,8 @@ export default defineConfig([
     files: ['client/**/*.{js,jsx}'],
     extends: [
       js.configs.recommended,
+      react.configs.flat.recommended,
+      react.configs.flat['jsx-runtime'],
       reactHooks.configs.flat.recommended,
       reactRefresh.configs.vite,
     ],
@@ -38,15 +40,18 @@ export default defineConfig([
         },
       },
     },
+    settings: {
+      react: {
+        version: 'detect',
+      },
+    },
   },
 
   // SERVER
   {
     files: ['server/**/*.{js,cjs,mjs}'],
     extends: [
-      ...fixupConfigRules(
-        compat.extends('@mate-academy/eslint-config'),
-      ),
+      ...fixupConfigRules(compat.extends('@mate-academy/eslint-config')),
     ],
     languageOptions: {
       globals: {
@@ -59,6 +64,12 @@ export default defineConfig([
     },
     rules: {
       'no-proto': 'off',
+      'no-console': [
+        'error',
+        {
+          allow: ['warn', 'error', 'info'],
+        },
+      ],
     },
   },
 ]);

@@ -1,18 +1,16 @@
 import { v4 as uuid } from 'uuid';
 
-let rooms = [];
+const rooms = [];
 
 const getAll = () => {
   return rooms;
 };
 
 const getById = (id) => {
-  // console.log('id', typeof id);
   return rooms.find((room) => room.id === +id) || null;
 };
 
 const createRoom = async ({ name }) => {
-  console.log('name', name);
   const room = {
     id: uuid(),
     name,
@@ -25,9 +23,11 @@ const createRoom = async ({ name }) => {
 };
 
 const deleteById = (id) => {
-  const index = rooms.findIndex((room) => room.id === id);
+  const index = rooms.findIndex((r) => r.id === id);
 
-  if (index === -1) return;
+  if (index === -1) {
+    return;
+  }
 
   const [room] = rooms.splice(index, 1);
 
@@ -41,7 +41,7 @@ const update = async ({ id, name }) => {
     return;
   }
 
-  return await Object.assign(roomUpdate, { name });
+  return Object.assign(roomUpdate, { name });
 };
 
 export const roomsService = {
