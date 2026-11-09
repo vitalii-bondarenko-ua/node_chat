@@ -1,53 +1,50 @@
-import { v4 as uuid } from 'uuid';
+import { Room } from '../models/room.js';
 
-const rooms = [];
-
-const getAll = () => {
-  return rooms;
+const getAll = async () => {
+  return Room.findAll({
+    order: [
+      ['createdAt', 'ASC'],
+      ['id', 'ASC'],
+    ],
+  });
 };
 
-const getById = (id) => {
-  return rooms.find((room) => room.id === +id) || null;
+const getById = async (id) => {
+  return Room.findByPk(id);
 };
 
 const createRoom = async ({ name }) => {
-  const room = {
-    id: uuid(),
-    name,
-    messages: [],
-  };
-
-  rooms.push(room);
-
-  return room;
-};
-
-const deleteById = (id) => {
-  const index = rooms.findIndex((r) => r.id === id);
-
-  if (index === -1) {
-    return;
-  }
-
-  const [room] = rooms.splice(index, 1);
-
-  return room;
+  return Room.create({ name });
 };
 
 const update = async ({ id, name }) => {
-  const roomUpdate = rooms.find((r) => r.id === id);
+  const room = await Room.findByPk(id);
 
-  if (!roomUpdate) {
-    return;
+  if (!room) {
+    return null;
   }
 
-  return Object.assign(roomUpdate, { name });
+  await room.update({ name });
+
+  return room;
+};
+
+const deleteById = async (id) => {
+  const room = await Room.findByPk(id);
+
+  if (!room) {
+    return null;
+  }
+
+  await room.destroy();
+
+  return room;
 };
 
 export const roomsService = {
   getAll,
   getById,
   createRoom,
-  deleteById,
   update,
+  deleteById,
 };

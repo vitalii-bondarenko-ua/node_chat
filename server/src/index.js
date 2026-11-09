@@ -1,114 +1,65 @@
-'use strict';
-import express from 'express';
-import path from 'path';
-import cors from 'cors';
 import 'dotenv/config';
+import express from 'express';
+import cors from 'cors';
+import { createServer } from 'node:http';
 
-import { WebSocketServer } from 'ws';
-import { v4 as uuid } from 'uuid';
-import { roomsRouter } from './routers/roomsRouter.js';
+import { client } from './utils/db.js';
+import { roomsRouter } from './routers/rooms.router.js';
+import { initRealtime } from './realtime.js';
 
 const PORT = process.env.PORT || 3005;
 const app = express();
+const server = createServer(app);
 
-app.use(express.json());
 app.use(cors());
-app.use(express.static(path.join(process.cwd())));
+app.use(express.json());
 
-// app.use('/user', usersRouter);
 app.use('/room', roomsRouter);
-// app.use('/');
 
-const server = app.listen(PORT, () => {
-  console.info(`Server running at http://localhost:${PORT}/`);
+app.use((req, res) => {
+  res.status(404).json({ message: 'Route not found' });
 });
 
-const wss = new WebSocketServer({ server });
-const rooms = [
-  {
-    id: 'room-1',
-    name: 'general-chat',
-    messages: [],
-  },
-];
+app.use((error, req, res, next) => {
+  if (res.headersSent) {
+    return next(error);
+  }
 
-wss.on('connection', (ws) => {
-  ws.on('message', (text) => {
-    const data = JSON.parse(text);
+  if (error.type === 'entity.parse.failed') {
+    return res.status(400).json({ message: 'Invalid JSON' });
+  }
 
-    switch (data.type) {
-      case 'setUsername':
-        ws.username = data.username; // зберігаєш ім'я для цього з'єднання
-        break;
+  if (error.type === 'entity.too.large') {
+    return res.status(413).json({ message: 'Request body too large' });
+  }
 
-      case 'createRoom':
-        const roomId = uuid();
+  if (error.name === 'SequelizeForeignKeyConstraintError') {
+    return res.status(409).json({
+      message: 'Related record no longer exists',
+    });
+  }
 
-        rooms[roomId] = {
-          name: data.name,
-          messages: [],
-        };
-        ws.roomId = roomId;
-        ws.send(JSON.stringify({ type: 'rooCreated', roomId }));
-        break;
+  console.error(error);
 
-      case 'sendMessage': // відправляєш тільки в цю кімнату
-        const roomFind = rooms.find((item) => item.id === data.roomId);
-
-        if (!roomFind) {
-          ws.send(
-            JSON.stringify({
-              type: 'error',
-              message: 'Room not found',
-            }),
-          );
-          break;
-        }
-
-        const newMessage = {
-          // додаєш повідомлення в масив кімнати
-          id: uuid(),
-          author: data.author || ws.username || 'Anonymous',
-          text: data.text,
-          time: new Date().toISOString(),
-        };
-
-        roomFind.messages.push(newMessage);
-
-        for (const client of wss.clients) {
-          if (client.roomId === data.roomId) {
-            client.send(
-              JSON.stringify({ type: 'newMessage', message: newMessage }),
-            );
-          }
-        }
-        break;
-
-      case 'joinRoom':
-        ws.roomId = data.roomId;
-
-        ws.send(
-          JSON.stringify({
-            type: 'oldMessages',
-            messages: rooms[data.roomId].messages,
-          }),
-        );
-        break;
-
-      case 'renameRoom': {
-        const roomRename = rooms.find((room) => room.id === data.roomId);
-
-        if (!roomRename) {
-          break;
-        }
-
-        roomRename.name = data.name;
-        break;
-      }
-
-      case 'deleteRoom':
-        delete rooms[data.roomId];
-        break;
-    }
-  });
+  return res.status(500).json({ message: 'Internal server error' });
 });
+
+async function start() {
+  try {
+    await client.authenticate();
+    console.info('PostgreSQL connected');
+
+    initRealtime(server);
+
+    server.listen(PORT, () => {
+      console.info(`Server running at http://localhost:${PORT}/`);
+    });
+  } catch (error) {
+    console.error('Failed to start server:', error);
+    process.exitCode = 1;
+
+    await client.close();
+  }
+}
+
+start();

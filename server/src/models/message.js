@@ -1,5 +1,6 @@
 import { client } from '../utils/db.js';
 import { DataTypes } from 'sequelize';
+import { Room } from './room.js';
 
 export const Message = client.define(
   'Message',
@@ -18,6 +19,16 @@ export const Message = client.define(
       type: DataTypes.STRING,
       allowNull: false,
     },
+    roomId: {
+      type: DataTypes.UUID,
+      allowNull: false,
+      references: {
+        model: Room,
+        key: 'id',
+      },
+      onDelete: 'CASCADE',
+      onUpdate: 'CASCADE',
+    },
     createdAt: {
       type: DataTypes.DATE,
       allowNull: false,
@@ -30,3 +41,13 @@ export const Message = client.define(
     updatedAt: false,
   },
 );
+
+Message.belongsTo(Room, {
+  foreignKey: 'roomId',
+  as: 'room',
+});
+
+Room.hasMany(Message, {
+  foreignKey: 'roomId',
+  as: 'messages',
+});
