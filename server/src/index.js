@@ -27,13 +27,11 @@ const server = app.listen(PORT, () => {
 const wss = new WebSocketServer({ server });
 const rooms = [
   {
-    'room-1': {
-      name: 'genel-chat',
-      messages: [],
-    },
+    id: 'room-1',
+    name: 'general-chat',
+    messages: [],
   },
 ];
-
 wss.on('connection', (ws) => {
   ws.on('message', (text) => {
     const data = JSON.parse(text);
@@ -51,15 +49,29 @@ wss.on('connection', (ws) => {
         break;
 
       case 'sendMessage': // відправляєш тільки в цю кімнату
-        rooms[data.roomId].messages.push({
+        const roomFind = rooms.find((item) => item.id === data.roomId);
+        if (!roomFind) {
+          ws.send(
+            JSON.stringify({
+              type: 'error',
+              message: 'Room not found',
+            }),
+          );
+          break;
+        }
+        const newMessage = {
           // додаєш повідомлення в масив кімнати
-          author: data.author,
+          id: uuid(),
+          author: data.author || ws.username || 'Anonymous',
           text: data.text,
-          time: data.time,
-        });
+          time: new Date().toISOString(),
+        };
+        roomFind.messages.push(newMessage);
         for (const client of wss.clients) {
           if (client.roomId === data.roomId) {
-            client.send(JSON.stringify(data));
+            client.send(
+              JSON.stringify({ type: 'newMessage', message: newMessage }),
+            );
           }
         }
         break;

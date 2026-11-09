@@ -1,12 +1,16 @@
+import { useCallback } from 'react';
 import { useRef } from 'react';
 import { useEffect, useState } from 'react';
 
 export const App = () => {
   const [rooms, setRooms] = useState([]);
-  const [activeRoomId, setActiveRoomId] = useState(''); // Стейт для текущей комнаты
+  const [activeRoom, setActiveRoom] = useState(null);
+const [activeRoomId, setActiveRoomId] = useState(null); // Стейт для текущей комнаты
   const [inputMessage, setInputMessage] = useState(''); // Стейт для инпута сообщения
   const [roomName, setRoomName] = useState('');
   const [messages, setMessages] = useState([]);
+  const [editingRoomId, setEditingRoomId] = useState('');
+  const [editedRoomName, setEditedRoomName] = useState('');
   const [userName, setUserName] = useState(() => {
     return localStorage.getItem('userName')
   });
@@ -21,11 +25,12 @@ export const App = () => {
   }, [userName]);
 
   useEffect(() => {
-  const socket = new WebSocket('ws://localhost:3005');
+    const socket = new WebSocket('ws://localhost:3005');
+    ws.current = socket;
   socket.addEventListener('open', () => {
     socket.send(JSON.stringify({
       type: 'setUserName',
-      username: 'Hanna',
+      username: userName || 'Hanna',
     }));
   });
     
@@ -41,8 +46,10 @@ export const App = () => {
      }
      });
     
-  return () => socket.close();
-}, []);
+    return () => {
+      socket.close();
+      ws.current = null; // Очищаем при размонтировании
+}}, []); // Пустой массив зависимостей, чтобы сокет открывался один раз
 
   const createRoom = async (roomName) => { // HTTP POST: Создание комнаты
     if (!roomName.trim()) return;
@@ -60,121 +67,169 @@ export const App = () => {
       setRoomName(''); // очищуємо інпут
   };
 
+  const fetchRooms = useCallback(async () => {
+
+      const response = await fetch('http://localhost:3005/room');
+      const data = await response.json();
+
+      console.log({ data });
+      setRooms(data);
+     }, []);
+      
   useEffect(() => { //HTTP GET: Загрузка списка комнат при старте приложения 
-    const fetchRooms = async () => {
-
-        const response = await fetch('http://localhost:3005/room');
-        const data = await response.json();
-  
-        console.log({ data });
-        setRooms(data);
-       };
-
+    // eslint-disable-next-line react-hooks/set-state-in-effect
     fetchRooms();
-  }, []);
+  }, [fetchRooms]);
 
    // Функция для выбора и входа в комнату (Join Room)
-   const handleJoinRoom = (roomId) => {
-  setActiveRoomId(roomId);
+ const handleJoinRoom = (roomId) => {
+  const selectedRoom = rooms.find((room) => room.id === roomId);
+  if (!selectedRoom) {
+    return;
+  }
+  setActiveRoom(selectedRoom);
   setMessages([]);
-  if (ws.current && ws.current.readyState === WebSocket.OPEN) {
+  if (ws.current?.readyState === WebSocket.OPEN) {
     ws.current.send(JSON.stringify({
       type: 'joinRoom',
       roomId,
     }));
   }
-   };
+};
    
   
-  const handleDeletRoom = async (id) => {
+  const handleDeleteRoom = async (id) => {
     await fetch(`http://localhost:3005/room/${id}`, {
        method: 'DELETE',
-     });
+    }).then(data => data.json())
+      .then(deletedRoom  => {
+        return setRooms(prevRooms => prevRooms.filter(room => room.id !== deletedRoom.id));
+    }).catch((error) => console.error('Error:', error)) 
   };
   
   const handleUpdateRoom = async (roomId, newName) => {
+      console.log('handleUpdateRoom', newName);
     await fetch(`http://localhost:3005/room/${roomId}`, {
       method: 'PATCH',
       headers: { 'Content-Type': 'application/json' },
       body: JSON.stringify({ name: newName }),
-     });
+     }).catch((error) => console.error('Error:', error)).finally(() => {
+        setEditedRoomName('');
+        setEditingRoomId('');
+        fetchRooms();
+    });
   };
   
   // Функция для отправки текстового сообщения по WebSocket
   const handleSendMessage = (event) => {
     event.preventDefault();
-    if (!inputMessage.trim() || !activeRoomId) return;
-
+    const text = inputMessage.trim();
+  if (!text || !activeRoom) {
+    return;
+  }
     if (ws.current && ws.current.readyState === WebSocket.OPEN) {
       ws.current.send(JSON.stringify({
         type: 'sendMessage',
-        roomId: activeRoomId,
+        roomId: activeRoom.id,
         author: userName,
-        text: inputMessage.trim(),
+        text: text,
       }));
       setInputMessage(''); // очищаем инпут сообщения
     }
   };
 
   return (
-    <aside className="sidebar">
-      <div className="sidebaHeader">
-        <section>
-          <h2>Rooms</h2>
-          <ul className="roomList">
-            {rooms.map((room) => (
-              <li key={room.id} style={{ cursor: 'pointer', padding: '3px' }}>
-                <button onClick={() => handleJoinRoom(room.id)}>
-                  {room.name}
-                </button>
-                <button type="button" onClick={() => handleDeletRoom(room.id)}>
-                  x
-                </button>
-                <button type="button" onClick={() => handleUpdateRoom(room.id)}>
-                  ✏️
-                </button>
-              </li>
-            ))}
-          </ul>
-        </section>
-        <div>
-      </div>
-        <input
-          type="text"
-          value={roomName}
-          onChange={(e) => setRoomName(e.target.value)}
-          placeholder="Room name"
-        />
-        <button
-          type="button"
-          className="btnCreateRoom"
-          onClick={() => createRoom(roomName)}
-        >
-          <span>+</span>
-        </button>
-       </div>
+   <aside className="sidebar">
+  <div className="sidebarHeader">
+    <section>
+      <h2>Rooms</h2>
+      <ul className="roomList">
+        {rooms.map((room) => (
+          <li key={room.id} style={{ cursor: 'pointer', padding: '3px' }}>
+            {editingRoomId === room.id ? (
+              <input
+                type="text"
+                value={editedRoomName}
+                onChange={(e) => setEditedRoomName(e.target.value)}
+                onBlur={() => {
+                  if (!editedRoomName.trim()) {
+                    setEditingRoomId('');
+                    setEditedRoomName('');
+                    return;
+                  }
+                  handleUpdateRoom(room.id, editedRoomName);
+                }}
+              />
+            ) : (
+              <button type="button" onClick={() => handleJoinRoom(room.id)}>
+                {room.name}
+              </button>
+            )}
+            
+            <button type="button" onClick={() => handleDeleteRoom(room.id)}>
+              x
+            </button>
+            
+            <button
+              type="button"
+              onClick={() => {
+                setEditingRoomId(room.id);
+                setEditedRoomName(room.name);
+              }}
+            >
+              ✏️
+            </button>
+          </li>
+        ))}
+      </ul>
+    </section>
 
-        <div className="messagesList">
-          {messages.map((message) => (
+    <div className="createRoomActions">
+      <input
+        type="text"
+        value={roomName}
+        onChange={(e) => setRoomName(e.target.value)}
+        placeholder="Room name"
+      />
+      <button
+        type="button"
+        className="btnCreateRoom"
+        onClick={() => createRoom(roomName)}
+      >
+        <span>+</span>
+      </button>
+    </div>
+  </div>
+
+  {activeRoom && (
+    <div className="activeRoomContainer">
+      <h2>Current room: {activeRoom.name}</h2>
+      <div className="messagesList">
+        {/* ИСПРАВЛЕНО: Чистая и надежная проверка длины массива через && и оператор сопоставления */}
+        {messages.length > 0 &&
+          messages.map((message) => (
             <div key={message.id}>
-              <strong>{message.author}</strong>
+              <strong>{message.author}: </strong>
               <span>{message.text}</span>
             </div>
           ))}
-        </div>
 
-    <form className="messageForm" onSubmit={handleSendMessage}>
-  <input
-    type="text"
-    value={inputMessage}
-    placeholder="Введіть повідомлення"
-    onChange={(e) => setInputMessage(e.target.value)}
-  />
-  <button type="submit">
-    Send
-  </button>
-</form>
-    </aside>
+        {/* ИСПРАВЛЕНО: Корректное условие для пустых сообщений */}
+        {messages.length === 0 && <p>No messages yet</p>}
+      </div>
+
+      <form className="messageForm" onSubmit={handleSendMessage}>
+        <input
+          type="text"
+          value={inputMessage}
+          placeholder="Введіть повідомлення"
+          onChange={(event) => setInputMessage(event.target.value)}
+        />
+        <button type="submit">Send</button>
+      </form>
+    </div>
+  )}
+</aside>
   );
 };
 
